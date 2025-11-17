@@ -144,6 +144,9 @@ class FunctionCallOutput(BaseModel):
     call_id: str
     """The ID of the tool call."""
 
+    name: Optional[str] = None
+    """The name of the function to call."""
+
     output: str
     """The result of the function."""
 

@@ -368,6 +368,7 @@ class AgentScopeAgent(Agent):
             # deepcopy required to avoid modifying the original message object
             # which may be used elsewhere in the streaming pipeline
             msg = copy.deepcopy(msg)
+            print(f"Dayu debug msg: {msg}")
 
             # Filter out unfinished tool_use messages
             if not last:
@@ -383,6 +384,7 @@ class AgentScopeAgent(Agent):
 
             # TODO: make this as a message converter
             content = msg.content
+            print(f"Dayu debug content: {content}")
             if isinstance(content, str):
                 last_content = content
             else:
@@ -473,20 +475,50 @@ class AgentScopeAgent(Agent):
                             index = None
 
                         elif element.get("type") == "tool_result":
-                            json_str = json.dumps(element.get("output"))
-                            data_delta_content = DataContent(
-                                index=index,
-                                data=FunctionCallOutput(
-                                    call_id=element.get("id"),
-                                    output=json_str,
-                                ).model_dump(),
-                            )
-                            plugin_output_message = Message(
-                                type=MessageType.PLUGIN_CALL_OUTPUT,
-                                role="assistant",
-                                content=[data_delta_content],
-                            )
-                            yield plugin_output_message.completed()
+                            output = element.get("output")
+                            if (isinstance(output, dict)):
+                                json_str = json.dumps(element.get("output"))
+                                data_delta_content = DataContent(
+                                    index=index,
+                                    data=FunctionCallOutput(
+                                        call_id=element.get("id"),
+                                        name=element.get("name"),
+                                        output=json_str,
+                                    ).model_dump(),
+                                )
+                                plugin_output_message = Message(
+                                    type=MessageType.PLUGIN_CALL_OUTPUT,
+                                    role="assistant",
+                                    content=[data_delta_content],
+                                )
+                                yield plugin_output_message.completed()
+                            elif (isinstance(output, list)):
+                                for single_output in output:
+                                    if single_output.get("type") == "text":
+                                        text = single_output.get("text", "")
+                                        if text:
+                                            if should_start_message:
+                                                index = None
+                                                yield message.in_progress()
+                                                should_start_message = False
+
+                                            data_delta_content = TextContent(
+                                                delta=True,
+                                                index=index,
+                                                text=text,
+                                            )
+                                            data_delta_content = message.add_delta_content(
+                                                new_content=data_delta_content,
+                                            )
+                                            index = data_delta_content.index
+                                            plugin_output_message = Message(
+                                                type=MessageType.PLUGIN_CALL_OUTPUT,
+                                                role="assistant",
+                                                content=[data_delta_content],
+                                            )
+                                            yield plugin_output_message.in_progress()
+                                            if last:
+                                                yield plugin_output_message.completed()
                             message = Message(
                                 type=MessageType.MESSAGE,
                                 role="assistant",
